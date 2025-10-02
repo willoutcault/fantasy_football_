@@ -664,22 +664,23 @@ ONE_PAGE_HTML = """
   {% endif %}
 
   {# --- DISCORD VIDEO WALL (moved to TOP, small tiles, no meta) --- #}
-  {% if discord_videos %}
-  <article class="card">
-    <h4>Smirnoff Video Wall</h4>
+    {% if discord_videos %}
+    <article class="card">
+    <h4>Latest Smirnoff Clips</h4>
     <div class="vid-grid">
-      {% for v in discord_videos %}
+        {% for v in discord_videos[:4] %}
         <div class="vid">
-          <video controls preload="none" playsinline loading="lazy">
+            <video controls preload="none" playsinline loading="lazy">
             <source src="{{ v.url }}" type="video/mp4"/>
-            <source src="{{ v.url }}"/>
-            Your browser can’t play this video.
-          </video>
+            </video>
         </div>
-      {% endfor %}
+        {% endfor %}
     </div>
-  </article>
-  {% endif %}
+    <p class="small" style="margin-top:.5rem;">
+        <a href="{{ url_for('videos') }}">View all clips →</a>
+    </p>
+    </article>
+    {% endif %}
 
   {# --- ICE STANDINGS (now more compact) --- #}
   {% if ice_rows %}
@@ -809,6 +810,36 @@ def dashboard():
         topdog=top_dog_last_year(),
         discord_videos=clips,
         story_teams=stories_sorted_teams(league),  # <-- NEW
+    )
+
+@app.route("/videos")
+def videos():
+    try:
+        clips = fetch_discord_videos(max_items=20)  # show more here
+    except Exception as e:
+        print(f"[discord] fetch error: {e}")
+        clips = []
+
+    return render_template_string(
+        """
+        {% extends "base.html" %}
+        {% block body %}
+        <article class="card">
+          <h4>Smirnoff Video Wall (Full)</h4>
+          <div class="vid-grid">
+            {% for v in discord_videos %}
+              <div class="vid">
+                <video controls preload="none" playsinline loading="lazy">
+                  <source src="{{ v.url }}" type="video/mp4"/>
+                  Your browser can’t play this video.
+                </video>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+        {% endblock %}
+        """,
+        discord_videos=clips,
     )
 
 if __name__ == "__main__":

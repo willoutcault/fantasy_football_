@@ -21,7 +21,7 @@ DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID", "")
 DISCORD_VIDEOS_MAX = int(os.getenv("DISCORD_VIDEOS_MAX", "8"))
 DISCORD_FETCH_LIMIT = int(os.getenv("DISCORD_FETCH_LIMIT", "75"))      # initial scan size (<=100)
-DISCORD_CACHE_SECS = int(os.getenv("DISCORD_CACHE_SECS", "180"))       # cache TTL
+DISCORD_CACHE_SECS = int(os.getenv("DISCORD_CACHE_SECS", "1600"))       # cache TTL
 
 if not LEAGUE_ID or not ESPN_S2 or not SWID:
     raise SystemExit("Please set LEAGUE_ID, ESPN_S2, and SWID in your .env file.")
@@ -670,7 +670,7 @@ ONE_PAGE_HTML = """
     <div class="vid-grid">
       {% for v in discord_videos %}
         <div class="vid">
-          <video controls preload="metadata" playsinline>
+          <video controls preload="none" playsinline loading="lazy">
             <source src="{{ v.url }}" type="video/mp4"/>
             <source src="{{ v.url }}"/>
             Your browser can’t play this video.

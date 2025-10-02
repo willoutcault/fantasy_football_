@@ -3,9 +3,15 @@ import time
 from datetime import datetime
 from typing import List, Dict
 
+from flask import request, send_file, redirect, url_for
+
 import requests
+import hashlib
+import pathlib
+import subprocess
+import shutil
 from dotenv import load_dotenv
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request, send_file, redirect, url_for
 from jinja2 import DictLoader
 
 # ----------------- ENV -----------------
@@ -31,6 +37,46 @@ try:
 except ImportError as e:
     raise SystemExit("Missing dependency espn-api. Run: pip install espn-api") from e
 
+# ----------------- Thumbnail Setup -----------------
+THUMB_DIR = pathlib.Path("/tmp/thumbs")
+THUMB_DIR.mkdir(parents=True, exist_ok=True)
+
+def _thumb_path_for(url: str) -> pathlib.Path:
+    h = hashlib.sha1(url.encode("utf-8")).hexdigest()
+    return THUMB_DIR / f"{h}.jpg"
+
+def _ffmpeg_available() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+def _try_render_thumb(vurl: str, out_path: pathlib.Path, ss: str) -> bool:
+    # NOTE: Timestamp format must be 00:00:SS.mmm (e.g., 00:00:03.000)
+    cmd = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+        "-ss", ss,               # fast seek to avoid black frame at t=0
+        "-i", vurl,              # remote URL (ffmpeg follows redirects)
+        "-frames:v", "1",        # grab exactly one frame
+        "-vf", "thumbnail,scale=640:-1",  # pick a representative frame and resize
+        "-q:v", "4",             # quality (1..31); 4 is plenty for a poster
+        "-y", str(out_path)
+    ]
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,    # keep errors for logs
+            timeout=10                 # a bit more forgiving than 6s
+        )
+        return out_path.exists()
+    except subprocess.TimeoutExpired:
+        print(f"[thumb] ffmpeg timeout at ss={ss}")
+    except subprocess.CalledProcessError as e:
+        # Include a short snippet of stderr to help debug
+        err = (e.stderr or b"").decode("utf-8", errors="ignore")[:300]
+        print(f"[thumb] ffmpeg error at ss={ss}: {err}")
+    except Exception as e:
+        print(f"[thumb] unexpected error at ss={ss}: {e}")
+    return False
 
 # ----------------- ESPN helpers -----------------
 def get_league(year: int | None = None):
@@ -615,13 +661,14 @@ BASE_HTML = """
   <body>
     <main class="container">
       <header>
-        <h2>🏈 Fantasy League – Dashboard</h2>
+        <h2>🧊 Ice Tracker 🧊</h2>
         <nav>
           <ul>
             <li><strong>{{ league_name }}</strong></li>
             <li class="small">Season {{ season }}</li>
           </ul>
         </nav>
+        <a href='https://www.theknot.com/tk-media/images/e46d4b0f-1ae4-4b82-b046-dcbd9adcb6cd~cr_362.0.2026.1664?ordering=explicit'>Produced by GOAT Commish</a>
       </header>
       {% block body %}{% endblock %}
       <footer class="small">Built with Flask + <code>espn-api</code>. Not affiliated with ESPN.</footer>
@@ -670,8 +717,9 @@ ONE_PAGE_HTML = """
     <div class="vid-grid">
         {% for v in discord_videos[:4] %}
         <div class="vid">
-            <video controls preload="none" playsinline loading="lazy">
-            <source src="{{ v.url }}" type="video/mp4"/>
+            <video controls preload="none" playsinline loading="lazy"
+                poster="{{ url_for('thumb') }}?url={{ v.url | urlencode }}">
+            <source src="{{ v.url }}" type="video/mp4">
             </video>
         </div>
         {% endfor %}
@@ -841,6 +889,27 @@ def videos():
         """,
         discord_videos=clips,
     )
+
+@app.route("/thumb")
+def thumb():
+    vurl = (request.args.get("url") or "").strip()
+    if not vurl:
+        return redirect(url_for("static", filename="smirnoff.png"), code=302)
+
+    out_path = _thumb_path_for(vurl)
+    if out_path.exists():
+        return send_file(out_path, mimetype="image/jpeg", max_age=7*24*3600)
+
+    if not _ffmpeg_available():
+        print("[thumb] ffmpeg not found; returning placeholder")
+        return redirect(url_for("static", filename="smirnoff.png"), code=302)
+
+    # Try at 3s (avoid black intro), then 1s as a fallback
+    if _try_render_thumb(vurl, out_path, "00:00:03.000") or _try_render_thumb(vurl, out_path, "00:00:01.000"):
+        return send_file(out_path, mimetype="image/jpeg", max_age=7*24*3600)
+
+    print("[thumb] giving up; returning placeholder")
+    return redirect(url_for("static", filename="smirnoff.png"), code=302)
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -1,6 +1,6 @@
-flask
-python-dotenv
-requests
-espn-api
-gunicorn
-Jinja2
+Flask>=3.0
+Jinja2>=3.1
+python-dotenv>=1.0
+requests>=2.32
+espn-api>=0.36.0
+gunicorn>=22.0

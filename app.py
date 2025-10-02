@@ -517,6 +517,7 @@ BASE_HTML = """
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ESPN Fantasy – Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css" rel="stylesheet">
+    <link rel="preload" as="image" href="{{ url_for('static', filename='smirnoff.webp') }}">
     <style>
       :root { --spacing:.9rem; }
       .grid { display:grid; gap:var(--spacing); grid-template-columns:1fr; }
@@ -744,7 +745,13 @@ ONE_PAGE_HTML = """
           <div class="bottles">
             {% for ic in r.icons %}
               <div class="bottle" aria-label="{{ ic.tip }}">
-                <img class="bottle-img" src="/static/smirnoff.png" alt="Smirnoff Ice" />
+                <img class="bottle-img"
+                src="/static/smirnoff.webp"
+                alt="Smirnoff Ice"
+                width="64" height="64"
+                loading="lazy"
+                decoding="async"
+                fetchpriority="low" />
                 <div class="tip">{{ ic.tip }}</div>
               </div>
             {% endfor %}

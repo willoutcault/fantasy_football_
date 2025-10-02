@@ -498,6 +498,65 @@ BASE_HTML = """
       .bottle .tip { position:absolute; bottom:110%; left:50%; transform:translateX(-50%); background:#111; color:#fff; padding:.3rem .45rem; border-radius:8px; font-size:.75rem; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .12s; z-index:10; }
       .bottle:hover .tip { opacity:1; }
 
+      /* Mobile: bottles appear in a row beneath the player's name */
+      @media (max-width: 640px) {
+      .row {
+        grid-template-columns: 1fr;   /* stack content */
+        align-items: start;
+        gap: .35rem;
+        min-height: unset;
+      }
+      .team {
+       min-width: 0;                 /* allow name truncation */
+      }
+      .team strong {                  /* ensure name can ellipsize */
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bottles {
+        grid-column: 1 / -1;          /* take full width under the name */
+        justify-content: flex-start;
+        margin-top: .1rem;
+        gap: 6px;                     /* keep a tidy row of bottles */
+      }
+      .bottle {                        /* slightly smaller bottles on mobile */
+        width: 52px;
+        height: 52px;
+      }
+      }
+      
+    /* Mobile-friendly tables */
+    @media (max-width: 640px) {
+    table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;   /* prevent text wrapping in cells */
+        -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS */
+    }
+    thead {
+        display: none;  /* hide table header if you want a simpler look */
+    }
+    tbody tr {
+        display: block;
+        margin-bottom: 1rem;
+        border-bottom: 1px solid #ddd;
+        padding-bottom: .5rem;
+    }
+    tbody td {
+        display: flex;
+        justify-content: space-between;
+        padding: .25rem .5rem;
+        font-size: .9rem;
+    }
+    tbody td:before {
+        content: attr(data-label);
+        font-weight: bold;
+        margin-right: .5rem;
+        color: #555;
+    }
+    }
+
+
       /* Scoreboard logos */
       .tm { display:flex; align-items:center; justify-content:center; gap:.35rem; }
       .tm img { width:18px; height:18px; object-fit:cover; border-radius:50%; }
@@ -526,7 +585,6 @@ BASE_HTML = """
     padding: 6px 2px 8px;
     overflow: hidden;    /* hide scrollbar */
     }
-
 
         .story-card {
         position: relative; display: flex; flex-direction: column; align-items: center;
@@ -655,17 +713,29 @@ ONE_PAGE_HTML = """
       <thead><tr><th class="center">Home</th><th class="center">Score</th><th class="center">Away</th><th class="center">Score</th><th class="center">Status</th></tr></thead>
       <tbody>
         {% for m in current_board %}
-          <tr>
-            <td class="center">
-              <span class="tm">{% if m.home_logo %}<img src="{{ m.home_logo }}" alt=""/>{% endif %}<span>{{ m.home }}</span></span>
+        <tr>
+            <td class="center" data-label="Home">
+            <span class="tm">
+                {% if m.home_logo %}<img src="{{ m.home_logo }}" alt=""/>{% endif %}
+                <span>{{ m.home }}</span>
+            </span>
             </td>
-            <td class="center">{{ "%.2f"|format(m.home_score) }}</td>
-            <td class="center">
-              <span class="tm">{% if m.away_logo %}<img src="{{ m.away_logo }}" alt=""/>{% endif %}<span>{{ m.away }}</span></span>
+            <td class="center" data-label="Score">{{ "%.2f"|format(m.home_score) }}</td>
+            <td class="center" data-label="Away">
+            <span class="tm">
+                {% if m.away_logo %}<img src="{{ m.away_logo }}" alt=""/>{% endif %}
+                <span>{{ m.away }}</span>
+            </span>
             </td>
-            <td class="center">{{ "%.2f"|format(m.away_score) }}</td>
-            <td class="center">{% if m.ongoing %}<span class="clock">🕒</span>{% else %}<span class="tick">✅</span>{% endif %}</td>
-          </tr>
+            <td class="center" data-label="Score">{{ "%.2f"|format(m.away_score) }}</td>
+            <td class="center" data-label="Status">
+            {% if m.ongoing %}
+                <span class="clock">🕒</span>
+            {% else %}
+                <span class="tick">✅</span>
+            {% endif %}
+            </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
@@ -674,18 +744,31 @@ ONE_PAGE_HTML = """
   <article class="card">
     <h4>League Standings</h4>
     <table>
-      <thead><tr><th>#</th><th>Team</th><th>W-L-T</th><th>PF</th><th>PA</th></tr></thead>
-      <tbody>
-        {% for row in standings %}
-        <tr>
-          <td>{{ loop.index }}</td>
-          <td>{% if row.logo %}<img class="team-logo" src="{{ row.logo }}" alt=""/>{% endif %} {{ row.team }}</td>
-          <td>{{ row.wins }}-{{ row.losses }}{% if row.ties and row.ties>0 %}-{{ row.ties }}{% endif %}</td>
-          <td>{{ "%.2f"|format(row.pf) }}</td>
-          <td>{{ "%.2f"|format(row.pa) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
+        <thead>
+            <tr>
+            <th>#</th>
+            <th>Team</th>
+            <th>W-L-T</th>
+            <th>PF</th>
+            <th>PA</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in standings %}
+            <tr>
+            <td data-label="#">{{ loop.index }}</td>
+            <td data-label="Team">
+                {% if row.logo %}<img class="team-logo" src="{{ row.logo }}" alt=""/>{% endif %}
+                {{ row.team }}
+            </td>
+            <td data-label="W-L-T">
+                {{ row.wins }}-{{ row.losses }}{% if row.ties and row.ties>0 %}-{{ row.ties }}{% endif %}
+            </td>
+            <td data-label="PF">{{ "%.2f"|format(row.pf) }}</td>
+            <td data-label="PA">{{ "%.2f"|format(row.pa) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
   </article>
 

@@ -56,6 +56,12 @@ img[loading="lazy"], video[preload] { content-visibility:auto; contain-intrinsic
   }
 }
 
+@media (max-width: 600px) {
+  .row {
+    display: block !important;   /* stack name/logo and bottles */
+  }
+}
+
 /* 8) Buttons and tap targets */
 button, .btn { min-height:44px; padding:.6rem .9rem; border-radius:10px; }
 

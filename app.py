@@ -205,6 +205,18 @@ def stories_sorted_teams(league):
 # ----------------- Scoreboard -----------------
 STARTER_EXCLUDE_SLOTS = {"BE", "BN", "IR", "RES"}
 
+def expected_starter_count(league) -> int:
+    """
+    Count how many starting slots this league expects (exclude bench/IR/reserve).
+    """
+    total = 0
+    # espn-api exposes a mapping like {'QB':1, 'RB':2, 'WR':2, 'TE':1, 'FLEX':1, 'D/ST':1, 'K':1, 'BE':7, 'IR':2}
+    for slot, count in getattr(league.settings, "roster_positions", {}).items():
+        if slot in STARTER_EXCLUDE_SLOTS:
+            continue
+        total += int(count or 0)
+    return total
+
 def _has_real_game(p) -> bool:
     opp = getattr(p, "pro_opponent", None)
     if not opp:
@@ -260,37 +272,104 @@ def week_completed(league, week) -> bool:
 
 
 # ----------------- Smirnoff (per-week + season) -----------------
-def _collect_ice_from_lineup(lineup, week):
+def _collect_ice_from_lineup(lineup, week, expected_starters: 10):
+    """
+    Returns (zeros, negatives, offenders)
+    offenders: list of {"name", "points", "ices", "week", ["reason"]}
+
+    Rules:
+      • negative points => 2 ices
+      • zero points     => 1 ice
+      • starter on BYE  => 1 ice
+      • empty starter   => 1 ice  (computed by comparing filled vs expected)
+    """
     zeros = negatives = 0
     offenders = []
-    for p in lineup or []:
-        slot = getattr(p, "slot_position", "") or ""
-        if slot in STARTER_EXCLUDE_SLOTS:
+
+    # Count filled starters (excludes BN/IR/RES etc.)
+    starters = [p for p in (lineup or []) if (getattr(p, "slot_position", "") or "") not in STARTER_EXCLUDE_SLOTS]
+
+    # 1) Score-based ices, and BYE starters
+    for p in starters:
+        # BYE starter (no real opponent)
+        if not _has_real_game(p):
+            offenders.append({
+                "name": getattr(p, "name", "Unknown"),
+                "points": 0.0,
+                "ices": 1,
+                "week": week,
+                "reason": "BYE starter"
+            })
             continue
+
+        # Only count score-based ices if the game is final
         if not _is_game_final(p):
             continue
+
         pts = float(getattr(p, "points", 0.0) or 0.0)
         if pts < 0:
             negatives += 1
-            offenders.append({"name": getattr(p, "name", "Unknown"),
-                              "points": round(pts, 2), "ices": 2, "week": week})
+            offenders.append({
+                "name": getattr(p, "name", "Unknown"),
+                "points": round(pts, 2),
+                "ices": 2,
+                "week": week,
+                "reason": "Negative points"
+            })
         elif pts == 0:
             zeros += 1
-            offenders.append({"name": getattr(p, "name", "Unknown"),
-                              "points": 0.0, "ices": 1, "week": week})
+            offenders.append({
+                "name": getattr(p, "name", "Unknown"),
+                "points": 0.0,
+                "ices": 1,
+                "week": week,
+                "reason": "Zero points"
+            })
+
+    # 2) Empty starter slots (if expected_starters provided)
+    if expected_starters is not None:
+        filled = len(starters)
+        missing = max(0, expected_starters - filled)
+        for _ in range(missing):
+            offenders.append({
+                "name": "Empty Starter",
+                "points": 0.0,
+                "ices": 1,
+                "week": week,
+                "reason": "Empty lineup slot"
+            })
+
     return zeros, negatives, offenders
 
 def ice_tracker_for_week(league, week, logo_map):
     rows = []
-    for box in league.box_scores(week):
-        h_team_name = safe_team_name(box.home_team)
-        z, n, offenders = _collect_ice_from_lineup(getattr(box, "home_lineup", []) or [], week)
-        rows.append({"team": h_team_name, "logo": logo_map.get(h_team_name, ""), "total_ices": z + n * 2, "offenders": offenders})
-        if box.away_team:
-            a_team_name = safe_team_name(box.away_team)
-            z, n, offenders = _collect_ice_from_lineup(getattr(box, "away_lineup", []) or [], week)
-            rows.append({"team": a_team_name, "logo": logo_map.get(a_team_name, ""), "total_ices": z + n * 2, "offenders": offenders})
+    expected = 10
 
+    for box in league.box_scores(week):
+        # home
+        z, n, offenders = _collect_ice_from_lineup(getattr(box, "home_lineup", []) or [], week, expected_starters=expected)
+        home_total = sum(o["ices"] for o in offenders)
+        h_team_name = safe_team_name(box.home_team)
+        rows.append({
+            "team": h_team_name,
+            "logo": logo_map.get(h_team_name, ""),
+            "total_ices": home_total,
+            "offenders": offenders
+        })
+
+        # away (if present)
+        if box.away_team:
+            z, n, offenders = _collect_ice_from_lineup(getattr(box, "away_lineup", []) or [], week, expected_starters=expected)
+            away_total = sum(o["ices"] for o in offenders)
+            a_team_name = safe_team_name(box.away_team)
+            rows.append({
+                "team": a_team_name,
+                "logo": logo_map.get(a_team_name, ""),
+                "total_ices": away_total,
+                "offenders": offenders
+            })
+
+    # combine by team (unchanged)
     combined = {}
     for r in rows:
         t = r["team"]
@@ -298,6 +377,7 @@ def ice_tracker_for_week(league, week, logo_map):
             combined[t] = {"team": t, "logo": r.get("logo", ""), "total_ices": 0, "offenders": []}
         combined[t]["total_ices"] += r["total_ices"]
         combined[t]["offenders"] += r["offenders"]
+
     out = list(combined.values())
     out.sort(key=lambda x: (-x["total_ices"], x["team"].lower()))
     return out
@@ -313,16 +393,18 @@ def ice_tracker_season_to_date(league):
                 by_team[t] = {"team": t, "logo": row.get("logo",""), "total_ices": 0, "offenders": []}
             by_team[t]["total_ices"] += row["total_ices"]
             by_team[t]["offenders"].extend(row["offenders"])
-    # expand per-ice icons with tooltip (Week • Player • Points)
+
     result = []
     for rec in by_team.values():
         icons = []
         for o in rec["offenders"]:
-            tip = f'Wk {o["week"]} • {o["name"]} • {o["points"]:+.2f} pts'
+            reason = f' • {o["reason"]}' if "reason" in o and o["reason"] else ""
+            tip = f'Wk {o["week"]} • {o["name"]} • {o["points"]:+.2f} pts{reason}'
             for _ in range(o["ices"]):
                 icons.append({"tip": tip})
         rec["icons"] = icons
         result.append(rec)
+
     result.sort(key=lambda x: (-x["total_ices"], x["team"].lower()))
     return result
 

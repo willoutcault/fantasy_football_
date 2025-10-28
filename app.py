@@ -25,7 +25,7 @@ SWID = os.getenv("SWID", "")
 # Discord (optional; the section hides automatically if not configured)
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID", "")
-DISCORD_VIDEOS_MAX = int(os.getenv("DISCORD_VIDEOS_MAX", "8"))
+DISCORD_VIDEOS_MAX = int(os.getenv("DISCORD_VIDEOS_MAX", "4"))
 DISCORD_FETCH_LIMIT = int(os.getenv("DISCORD_FETCH_LIMIT", "75"))      # initial scan size (<=100)
 DISCORD_CACHE_SECS = int(os.getenv("DISCORD_CACHE_SECS", "1600"))       # cache TTL
 
